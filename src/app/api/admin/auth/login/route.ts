@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAdminCredentials, verifyPassword, createSessionToken, setSessionCookie } from '@/lib/auth'
+import { verifyPassword, createSessionToken, setSessionCookie } from '@/lib/auth'
+import { db } from '@/lib/db'
 
 // Simple in-memory rate limiting (in production, use Redis or similar)
 const loginAttempts = new Map<string, { count: number; resetTime: number }>()
@@ -74,11 +75,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get admin credentials
-    const adminCredentials = getAdminCredentials()
+    // Find admin user in database
+    const admin = await db.admin.findUnique({
+      where: { username }
+    })
 
-    // Check username
-    if (username !== adminCredentials.username) {
+    // Check if admin exists
+    if (!admin) {
       recordFailedAttempt(clientIP)
       return NextResponse.json(
         { error: 'Invalid username or password' },
@@ -87,7 +90,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify password
-    const isValidPassword = await verifyPassword(password, adminCredentials.passwordHash)
+    const isValidPassword = await verifyPassword(password, admin.passwordHash)
     if (!isValidPassword) {
       recordFailedAttempt(clientIP)
       return NextResponse.json(

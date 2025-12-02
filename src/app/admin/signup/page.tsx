@@ -1,101 +1,108 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Eye, EyeOff, Shield, Lock, AlertCircle } from 'lucide-react'
+import { Eye, EyeOff, Shield, UserPlus, AlertCircle, CheckCircle } from 'lucide-react'
 import Link from 'next/link'
 
-export default function AdminLogin() {
+export default function AdminSignup() {
   const [username, setUsername] = useState('')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
+  const [success, setSuccess] = useState(false)
   const router = useRouter()
-
-  useEffect(() => {
-    // Check if already authenticated
-    checkAuthentication()
-  }, [router])
-
-  const checkAuthentication = async () => {
-    try {
-      const response = await fetch('/api/admin/auth/session')
-      const data = await response.json()
-
-      if (data.authenticated) {
-        router.push('/admin/dashboard')
-      }
-    } catch (error) {
-      // User is not authenticated, stay on login page
-      console.log('Not authenticated')
-    }
-  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
     setError('')
 
+    // Validate passwords match
+    if (password !== confirmPassword) {
+      setError('Passwords do not match')
+      setIsLoading(false)
+      return
+    }
+
     try {
-      const response = await fetch('/api/admin/auth/login', {
+      const response = await fetch('/api/admin/auth/signup', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ username, password }),
-        credentials: 'include', // Include cookies
+        body: JSON.stringify({ username, email, password }),
       })
 
       const data = await response.json()
 
       if (response.ok && data.success) {
-        // Authentication successful, redirect will happen via middleware
-        router.push('/admin/dashboard')
+        setSuccess(true)
+        setTimeout(() => {
+          router.push('/admin')
+        }, 2000)
       } else {
-        // Handle different error types
-        if (response.status === 429) {
-          // Rate limiting
-          const retryAfter = data.retryAfter || 60
-          setError(`Too many login attempts. Please try again in ${retryAfter} seconds.`)
-        } else {
-          setError(data.error || 'Login failed')
-        }
+        setError(data.error || 'Signup failed')
       }
     } catch (error) {
-      console.error('Login error:', error)
+      console.error('Signup error:', error)
       setError('Network error. Please try again.')
     } finally {
       setIsLoading(false)
     }
   }
 
+  if (success) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md shadow-xl">
+          <CardContent className="p-8 text-center">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-4">
+              <CheckCircle className="w-8 h-8 text-green-600" />
+            </div>
+            <h2 className="text-2xl font-bold text-gray-800 mb-2">Account Created!</h2>
+            <p className="text-gray-600 mb-4">
+              Your admin account has been created successfully.
+            </p>
+            <p className="text-sm text-gray-500">
+              Redirecting to login page...
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        {/* Admin Header */}
+        {/* Header */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-full mb-4">
             <Shield className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-800 mb-2">Admin Portal</h1>
+          <h1 className="text-2xl font-bold text-gray-800 mb-2">Create Admin Account</h1>
           <p className="text-gray-600">Vaidya Jyothi Scholarship Management</p>
         </div>
 
-        {/* Login Card */}
+        {/* Signup Card */}
         <Card className="shadow-xl">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Lock className="w-5 h-5" />
-              Admin Login
+              <UserPlus className="w-5 h-5" />
+              Admin Signup
             </CardTitle>
             <CardDescription>
-              Enter your credentials to access the admin dashboard
+              Create your admin account to manage the scholarship platform
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -114,7 +121,22 @@ export default function AdminLogin() {
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="Enter username"
+                  placeholder="Enter username (3-20 characters)"
+                  required
+                  disabled={isLoading}
+                  pattern="[a-zA-Z0-9_]{3,20}"
+                  title="Username must be 3-20 characters and contain only letters, numbers, and underscores"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="email">Email Address</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="Enter your email"
                   required
                   disabled={isLoading}
                 />
@@ -128,9 +150,10 @@ export default function AdminLogin() {
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Enter password"
+                    placeholder="Enter password (min 8 characters)"
                     required
                     disabled={isLoading}
+                    minLength={8}
                   />
                   <Button
                     type="button"
@@ -149,6 +172,36 @@ export default function AdminLogin() {
                 </div>
               </div>
 
+              <div className="space-y-2">
+                <Label htmlFor="confirmPassword">Confirm Password</Label>
+                <div className="relative">
+                  <Input
+                    id="confirmPassword"
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Confirm your password"
+                    required
+                    disabled={isLoading}
+                    minLength={8}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    disabled={isLoading}
+                  >
+                    {showConfirmPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+
               <Button
                 type="submit"
                 className="w-full"
@@ -157,27 +210,20 @@ export default function AdminLogin() {
                 {isLoading ? (
                   <div className="flex items-center gap-2">
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    Signing in...
+                    Creating Account...
                   </div>
                 ) : (
-                  'Sign In'
+                  'Create Admin Account'
                 )}
               </Button>
             </form>
 
             <div className="mt-6 text-center">
               <p className="text-sm text-gray-600">
-                Don't have an account?{' '}
-                <Link href="/admin/signup" className="text-blue-600 hover:text-blue-700 font-semibold">
-                  Create Admin Account
+                Already have an account?{' '}
+                <Link href="/admin" className="text-blue-600 hover:text-blue-700 font-semibold">
+                  Sign In
                 </Link>
-              </p>
-            </div>
-
-            <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-              <h4 className="font-semibold text-blue-800 mb-2">Security Notice</h4>
-              <p className="text-sm text-blue-700">
-                This is a restricted area. Unauthorized access is prohibited and will be logged.
               </p>
             </div>
           </CardContent>
@@ -191,3 +237,4 @@ export default function AdminLogin() {
     </div>
   )
 }
+
