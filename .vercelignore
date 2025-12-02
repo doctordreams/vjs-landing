@@ -1,0 +1,44 @@
+# Vercel ignore file
+# Files and directories to exclude from Vercel deployment
+
+# Development files
+dev.log
+*.log
+.cache
+
+# Database files (SQLite - not used in production)
+*.db
+*.db-journal
+db/
+prisma/db/
+
+# Test files
+test/
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+
+# Documentation (optional - remove if you want docs deployed)
+*.md
+!README.md
+
+# Environment files (should be set in Vercel dashboard)
+.env*
+!.env.example
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Cookies and temporary files
+cookies.txt
+*.tmp
+
