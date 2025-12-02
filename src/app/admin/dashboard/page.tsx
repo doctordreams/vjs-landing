@@ -55,7 +55,7 @@ export default function AdminDashboard() {
     phonepeBaseUrl: 'https://api.phonepe.com',
     payuKey: '',
     payuSalt: '',
-    payuBaseUrl: 'https://test.payu.in',
+    payuBaseUrl: process.env.NODE_ENV === 'production' ? 'https://secure.payu.in' : 'https://test.payu.in',
     payuMerchantId: '',
     applicationFee: '250',
     applicationCurrency: 'INR',
@@ -66,7 +66,7 @@ export default function AdminDashboard() {
     smtpPassword: '',
     smtpFromEmail: '',
     smtpFromName: 'Vaidya Jyothi Scholarship',
-    siteUrl: typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000',
+    siteUrl: process.env.NEXT_PUBLIC_APP_URL || (typeof window !== 'undefined' ? window.location.origin : ''),
     adminEmail: '',
     supportPhone: '',
     supportEmail: ''

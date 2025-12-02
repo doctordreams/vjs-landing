@@ -72,10 +72,23 @@ export async function POST(request: NextRequest) {
     const studentId = googleSheetsService.generateStudentId()
     const transactionId = googleSheetsService.generateTransactionId()
 
+    // Get base URL - CRITICAL for production
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 
+      (typeof window !== 'undefined' ? window.location.origin : '')
+    
+    if (!baseUrl && process.env.NODE_ENV === 'production') {
+      console.error('⚠️ CRITICAL: NEXT_PUBLIC_APP_URL not set in production!')
+      return NextResponse.json(
+        { error: 'Server configuration error: Application URL not configured' },
+        { status: 500 }
+      )
+    }
+
     // Get payment gateway from admin settings
     let paymentGateway = 'phonepe' // default
     try {
-      const settingsResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/admin/settings`)
+      const settingsUrl = baseUrl ? `${baseUrl}/api/admin/settings` : '/api/admin/settings'
+      const settingsResponse = await fetch(settingsUrl)
       const settingsData = await settingsResponse.json()
       if (settingsData.success && settingsData.settings.paymentGateway) {
         paymentGateway = settingsData.settings.paymentGateway
@@ -87,7 +100,8 @@ export async function POST(request: NextRequest) {
     // Get application fee from admin settings (default to 250)
     let applicationFee = 250
     try {
-      const settingsResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/admin/settings`)
+      const settingsUrl = baseUrl ? `${baseUrl}/api/admin/settings` : '/api/admin/settings'
+      const settingsResponse = await fetch(settingsUrl)
       const settingsData = await settingsResponse.json()
       if (settingsData.success && settingsData.settings.applicationFee) {
         applicationFee = parseFloat(settingsData.settings.applicationFee) || 250
@@ -132,8 +146,7 @@ export async function POST(request: NextRequest) {
       // Continue with payment even if Google Sheets fails
     }
 
-    // Get base URL for redirects
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    // Base URL already set above - reuse it
 
     // Check if we're in test mode (no payment credentials configured)
     const isTestMode = process.env.PAYMENT_TEST_MODE === 'true' || 

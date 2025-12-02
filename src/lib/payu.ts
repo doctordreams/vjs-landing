@@ -92,9 +92,18 @@ class PayUService {
     // Load settings from environment variables or admin settings
     this.key = process.env.PAYU_KEY || this.getStoredSetting('payuKey') || ''
     this.salt = process.env.PAYU_SALT || this.getStoredSetting('payuSalt') || ''
-    this.baseUrl = process.env.PAYU_BASE_URL || this.getStoredSetting('payuBaseUrl') || 'https://test.payu.in'
-    this.surl = process.env.NEXT_PUBLIC_APP_URL || this.getStoredSetting('siteUrl') || 'http://localhost:3000/payment/success'
-    this.furl = process.env.NEXT_PUBLIC_APP_URL || this.getStoredSetting('siteUrl') || 'http://localhost:3000/payment/failure'
+    
+    // PayU Base URL - Use production URL: https://secure.payu.in (or test: https://test.payu.in)
+    this.baseUrl = process.env.PAYU_BASE_URL || this.getStoredSetting('payuBaseUrl') || 
+      (process.env.NODE_ENV === 'production' ? 'https://secure.payu.in' : 'https://test.payu.in')
+    
+    // Success and Failure URLs - Must use production URL in production
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || this.getStoredSetting('siteUrl') || ''
+    if (!baseUrl) {
+      console.warn('⚠️ NEXT_PUBLIC_APP_URL or siteUrl not set! Payment redirects may fail.')
+    }
+    this.surl = baseUrl ? `${baseUrl}/payment/success` : '/payment/success'
+    this.furl = baseUrl ? `${baseUrl}/payment/failure` : '/payment/failure'
   }
 
   private getStoredSetting(key: string): string {

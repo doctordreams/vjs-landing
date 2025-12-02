@@ -59,7 +59,7 @@ const defaultSettings: AdminSettings = {
   smtpPassword: '',
   smtpFromEmail: '',
   smtpFromName: 'Vaidya Jyothi Scholarship',
-  siteUrl: typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000',
+  siteUrl: process.env.NEXT_PUBLIC_APP_URL || '',
   adminEmail: '',
   supportPhone: '',
   supportEmail: ''
