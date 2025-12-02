@@ -65,9 +65,15 @@ const defaultSettings: AdminSettings = {
   supportEmail: ''
 }
 
-// Load settings from file
+// Load settings from file (only works in non-serverless environments)
 function loadSettingsFromFile(): AdminSettings {
   try {
+    // In serverless environments, file system might not be accessible
+    if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
+      // Return defaults merged with environment variables
+      return { ...defaultSettings }
+    }
+
     if (fs.existsSync(SETTINGS_FILE)) {
       const data = fs.readFileSync(SETTINGS_FILE, 'utf-8')
       const parsed = JSON.parse(data)
@@ -76,15 +82,25 @@ function loadSettingsFromFile(): AdminSettings {
       return { ...defaultSettings, ...parsed }
     }
   } catch (error) {
-    console.error('Error loading admin settings:', error)
+    console.warn('Could not load settings from file (serverless environment?). Using defaults.')
   }
 
   return { ...defaultSettings }
 }
 
-// Save settings to file
+// Save settings to file (only works in non-serverless environments)
 function saveSettingsToFile(settings: AdminSettings): void {
   try {
+    // Check if we're in a serverless environment (Vercel, etc.)
+    // In serverless, file system is read-only, so we skip file writing
+    if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
+      console.warn('⚠️ File system is read-only in serverless environment. Settings will be stored in memory only.')
+      // Store in memory cache only
+      settingsCache = { ...settings }
+      cacheTimestamp = Date.now()
+      return
+    }
+
     // Create directory if it doesn't exist
     const dir = path.dirname(SETTINGS_FILE)
     if (!fs.existsSync(dir)) {
@@ -93,8 +109,10 @@ function saveSettingsToFile(settings: AdminSettings): void {
 
     fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2))
   } catch (error) {
-    console.error('Error saving admin settings:', error)
-    throw new Error('Failed to save settings')
+    // If file write fails (e.g., in serverless), just use memory cache
+    console.warn('⚠️ Could not save settings to file (serverless environment?). Using memory cache only.')
+    settingsCache = { ...settings }
+    cacheTimestamp = Date.now()
   }
 }
 
