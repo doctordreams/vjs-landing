@@ -25,7 +25,7 @@ function PaymentFailureContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-red-50 to-orange-50 flex items-center justify-center">
+      <div className="min-h-screen bg-linear-to-br from-red-50 to-orange-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Loading...</p>
@@ -35,7 +35,7 @@ function PaymentFailureContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-red-50 to-orange-50 py-8 px-4">
+    <div className="min-h-screen bg-linear-to-br from-red-50 to-orange-50 py-8 px-4">
       <div className="max-w-2xl mx-auto">
         {/* Failure Header */}
         <div className="text-center mb-8">
@@ -68,7 +68,7 @@ function PaymentFailureContent() {
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Amount</p>
-                    <p className="font-semibold">₹250</p>
+                    <p className="font-semibold">₹1</p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Time</p>
@@ -159,7 +159,7 @@ function PaymentFailureContent() {
 export default function PaymentFailure() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen bg-gradient-to-br from-red-50 to-orange-50 flex items-center justify-center">
+      <div className="min-h-screen bg-linear-to-br from-red-50 to-orange-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Loading...</p>

@@ -73,15 +73,19 @@ export async function POST(request: NextRequest) {
     const transactionId = googleSheetsService.generateTransactionId()
 
     // Get base URL - CRITICAL for production
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 
-      (typeof window !== 'undefined' ? window.location.origin : '')
+    let baseUrl = process.env.NEXT_PUBLIC_APP_URL || ''
     
-    if (!baseUrl && process.env.NODE_ENV === 'production') {
+    // Fallback for local development
+    if (!baseUrl || baseUrl === 'null' || baseUrl === 'undefined') {
+      baseUrl = (typeof window !== 'undefined' && window.location.origin) ? window.location.origin : 'http://localhost:3000'
+    }
+    
+    // Remove trailing slash
+    baseUrl = baseUrl.replace(/\/$/, '')
+    
+    if (!process.env.NEXT_PUBLIC_APP_URL && process.env.NODE_ENV === 'production') {
       console.error('⚠️ CRITICAL: NEXT_PUBLIC_APP_URL not set in production!')
-      return NextResponse.json(
-        { error: 'Server configuration error: Application URL not configured' },
-        { status: 500 }
-      )
+      // But we proceed with the fallback if possible
     }
 
     // Get payment gateway from admin settings
@@ -131,28 +135,88 @@ export async function POST(request: NextRequest) {
       presentCollege: body.presentCollege,
       tenthPercentage: body.tenthPercentage,
       ddRepresentative: body.ddRepresentative || '',
-      countryPreference: body.countryPreference,
-      collegePreference: body.collegePreference || '',
-      budget: body.budget || '',
-      facilities: body.facilities || ''
+      countryPreference: Array.isArray(body.countryPreference) ? body.countryPreference.join(', ') : body.countryPreference,
+      collegePreference: '', // Removed - now in comments
+      budget: '', // Removed - now in comments
+      facilities: '', // Removed - now in comments
+      comments: body.comments || ''
     }
 
-    // Save initial data to Google Sheets (optional - continue if it fails)
+    // Create Prisma record (Dual Storage)
+    let prismaSaved = false
+    try {
+      const { db } = await import('@/lib/db')
+      
+      await db.scholarshipApplication.create({
+        data: {
+          studentId: applicationData.studentId,
+          transactionId: applicationData.transactionId,
+          paymentStatus: applicationData.paymentStatus,
+          amount: applicationData.amount,
+          studentName: applicationData.studentName,
+          fatherName: applicationData.fatherName,
+          motherName: applicationData.motherName,
+          studentMobile: applicationData.studentMobile,
+          fatherMobile: applicationData.fatherMobile,
+          motherMobile: applicationData.motherMobile,
+          email: applicationData.email,
+          address: applicationData.address,
+          pincode: applicationData.pincode,
+          taluk: applicationData.taluk,
+          district: applicationData.district,
+          presentCollege: applicationData.presentCollege,
+          tenthPercentage: applicationData.tenthPercentage,
+          ddRepresentative: applicationData.ddRepresentative,
+          countryPreference: applicationData.countryPreference,
+          collegePreference: applicationData.collegePreference,
+          budget: applicationData.budget,
+          facilities: applicationData.facilities,
+          comments: applicationData.comments
+        }
+      })
+      console.log('Data saved to Prisma DB successfully')
+      prismaSaved = true
+    } catch (error) {
+       console.error('Prisma DB save failed:', error)
+       // We continue for now, but rely on sheetsSaved if this fails
+    }
+
+    // Save data to Google Sheets
+    let sheetsSaved = false
     try {
       await googleSheetsService.appendRow(applicationData)
       console.log('Data saved to Google Sheets successfully')
+      sheetsSaved = true
     } catch (error) {
-      console.warn('Google Sheets save failed (continuing anyway):', error)
-      // Continue with payment even if Google Sheets fails
+      console.warn('Google Sheets save failed:', error)
+    }
+
+    // CRITICAL: Ensure at least one storage succeeded before proceeding to payment
+    if (!prismaSaved && !sheetsSaved) {
+      console.error('⚠️ CRITICAL: BOTH storage systems failed! Blocking payment initiation.')
+      return NextResponse.json(
+        { error: 'System error: Failed to save application data. Please try again or contact support.' },
+        { status: 500 }
+      )
     }
 
     // Base URL already set above - reuse it
 
     // Check if we're in test mode (no payment credentials configured)
-    const isTestMode = process.env.PAYMENT_TEST_MODE === 'true' || 
-                      !process.env.PHONEPE_MERCHANT_ID && 
-                      !process.env.PAYU_KEY
+    const paymentTestMode = process.env.PAYMENT_TEST_MODE
+    const payuKey = process.env.PAYU_KEY
+    
+    console.log('--- DEBUG PAYMENT ENV ---')
+    console.log('PAYMENT_TEST_MODE:', paymentTestMode)
+    console.log('PAYU_KEY exists:', !!payuKey)
+    console.log('PAYU_KEY length:', payuKey ? payuKey.length : 0)
+    console.log('-------------------------')
 
+    const isTestMode = paymentTestMode === 'true' || !payuKey
+
+    // STRICTLY USE PAYU AS PER USER REQUEST
+    paymentGateway = 'payu' 
+    
     // Initiate payment based on selected gateway
     let paymentResponse
     if (isTestMode) {
@@ -161,11 +225,12 @@ export async function POST(request: NextRequest) {
       paymentResponse = {
         success: true,
         data: {
-          paymentUrl: `${baseUrl}/payment/success?txnid=${transactionId}&amount=${applicationFee}&test=true`
+          paymentUrl: `${baseUrl}/payment/success?txnid=${transactionId}&amount=${applicationFee}&test=true&gateway=payu`
         }
       }
-    } else if (paymentGateway === 'payu') {
-      // PayU Payment
+    } else {
+      // PayU Payment (Default)
+      console.log('Using PayU Gateway')
       paymentResponse = await payUService.initiatePayment({
         key: '', // Will be loaded from settings in the service
         salt: '', // Will be loaded from settings in the service
@@ -178,7 +243,9 @@ export async function POST(request: NextRequest) {
         surl: `${baseUrl}/payment/success`,
         furl: `${baseUrl}/payment/failure`
       })
-    } else {
+      
+      /* PHONEPE COMMENTED OUT AS PER REQUEST
+      
       // PhonePe Payment (default)
       paymentResponse = await phonePeService.initiatePayment({
         merchantId: '', // Will be loaded from settings in the service
@@ -193,18 +260,19 @@ export async function POST(request: NextRequest) {
         shortName: body.studentName,
         description: 'Vaidya Jyothi Scholarship Application Fee'
       })
+      */
     }
 
-    // If payment gateway fails, fall back to test mode
-    if (!paymentResponse.success || !paymentResponse.data?.paymentUrl) {
-      console.warn('Payment gateway failed, falling back to test mode')
-      paymentResponse = {
-        success: true,
-        data: {
-          paymentUrl: `${baseUrl}/payment/success?txnid=${transactionId}&amount=${applicationFee}&test=true&gateway=${paymentGateway}`
-        }
-      }
+    // Verify payment response structure
+    if (!paymentResponse || !paymentResponse.success) {
+      console.error('Payment Gateway Error:', paymentResponse)
+      return NextResponse.json(
+        { error: paymentResponse?.message || 'Payment gateway failed to initialize' },
+        { status: 500 }
+      )
     }
+
+    const paymentUrl = paymentResponse.data?.paymentUrl || ''
 
     return NextResponse.json(
       { 
@@ -213,7 +281,10 @@ export async function POST(request: NextRequest) {
         studentId,
         amount: applicationFee,
         paymentGateway,
-        paymentUrl: paymentResponse.data.paymentUrl
+        paymentUrl,
+        sheetsSaved,
+        // Pass all PayU parameters to the frontend for Form POST
+        payuParams: paymentResponse.data
       },
       { status: 200 }
     )

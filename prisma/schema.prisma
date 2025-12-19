@@ -9,7 +9,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -38,4 +38,42 @@ model Admin {
   passwordHash String
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+}
+
+model ScholarshipApplication {
+  id                String   @id @default(cuid())
+  studentId         String   @unique
+  transactionId     String   @unique
+  paymentStatus     String   @default("PENDING") // PENDING, SUCCESS, FAILED
+  amount            Float
+  
+  // Personal Info
+  studentName       String
+  fatherName        String
+  motherName        String
+  studentMobile     String
+  fatherMobile      String?
+  motherMobile      String?
+  email             String
+  
+  // Address Info
+  address           String
+  pincode           String
+  taluk             String
+  district          String
+  
+  // Academic Info
+  presentCollege    String
+  tenthPercentage   String
+  ddRepresentative  String?
+  
+  // Preferences
+  countryPreference String
+  collegePreference String?
+  budget            String?
+  facilities        String?
+  comments          String?
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }

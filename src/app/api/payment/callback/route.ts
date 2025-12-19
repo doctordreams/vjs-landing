@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
 
     } else if (isPayUCallback) {
       // Handle PayU callback
-      const callbackData = payUService.parseCallbackData(body)
+      const callbackData = payUService.parseCallbackData(body) as any
       if (!callbackData) {
         console.error('Invalid PayU callback data format')
         return NextResponse.json({ error: 'Invalid callback data' }, { status: 400 })
@@ -56,7 +56,9 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Invalid hash' }, { status: 400 })
       }
 
-      const { txnid, status, amount } = callbackData
+      const txnid = String(callbackData.txnid || '').trim()
+      const status = String(callbackData.status || '').toLowerCase()
+      const amount = callbackData.amount
 
       // Update payment status in Google Sheets
       if (status === 'success' || status === 'completed') {
@@ -91,7 +93,7 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    const txnid = searchParams.get('txnid')
+    const txnid = searchParams.get('transactionId') || searchParams.get('txnid')
 
     if (!txnid) {
       return NextResponse.json(
@@ -100,24 +102,49 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Check payment status
-    const statusResponse = await payUService.checkPaymentStatus(txnid)
-    
-    if (!statusResponse.success) {
-      return NextResponse.json(
-        { error: 'Failed to check payment status' },
-        { status: 500 }
-      )
+    // Check payment status (best effort)
+    let paymentStatus = 'unknown'
+    try {
+      const statusResponse = await payUService.checkPaymentStatus(txnid)
+      if (statusResponse.success) {
+        paymentStatus = statusResponse.data?.status || 'unknown'
+      }
+    } catch (err) {
+      console.warn('Payment status check failed (using stored status):', err)
     }
 
     // Get transaction details from Google Sheets
-    const transaction = await googleSheetsService.getTransaction(txnid)
+    console.log(`[Callback GET] Searching for transactionId: "${txnid}"`)
+    let transaction = await googleSheetsService.getTransaction(txnid)
+
+    // FALLBACK: If not in Sheets, check Prisma
+    if (!transaction) {
+      console.warn(`[Callback GET] Transaction "${txnid}" not found in Google Sheets, trying Prisma...`)
+      try {
+        const { db } = await import('@/lib/db')
+        const dbRecord = await db.scholarshipApplication.findUnique({
+          where: { transactionId: txnid }
+        })
+        
+        if (dbRecord) {
+          console.log(`[Callback GET] Found record in Prisma for "${txnid}"`)
+          transaction = dbRecord as any
+        } else {
+          console.warn(`[Callback GET] Transaction "${txnid}" NOT found in Prisma`)
+        }
+      } catch (dbErr) {
+        console.error('[Callback GET] Prisma fallback lookup failed:', dbErr)
+      }
+    }
+
+    if (!transaction) {
+       console.warn(`Transaction ${txnid} not found in any storage source`)
+    }
 
     return NextResponse.json({
       success: true,
-      paymentStatus: statusResponse.data?.status || 'unknown',
+      paymentStatus: paymentStatus !== 'unknown' ? paymentStatus : (transaction?.paymentStatus || 'unknown'),
       transaction: transaction,
-      details: statusResponse.data
     })
 
   } catch (error) {

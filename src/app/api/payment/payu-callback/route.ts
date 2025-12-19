@@ -4,60 +4,64 @@ import { payUService } from '@/lib/payu'
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const receivedHash = request.headers.get('x-verify') || request.headers.get('X-VERIFY')
-
-    if (!receivedHash) {
-      console.error('Missing hash in PayU callback')
-      return NextResponse.json({ error: 'Missing hash' }, { status: 400 })
-    }
-
-    // Parse callback data
-    const callbackData = payUService.parseCallbackData(body)
-    if (!callbackData) {
-      console.error('Invalid PayU callback data format')
-      return NextResponse.json({ error: 'Invalid callback data' }, { status: 400 })
-    }
-
-    // Validate hash
-    const isValidHash = payUService.validateCallback(callbackData, receivedHash)
-    if (!isValidHash) {
-      console.error('Invalid hash in PayU callback')
-      return NextResponse.json({ error: 'Invalid hash' }, { status: 400 })
-    }
-
-    const { txnid, status, amount } = callbackData
-
-    // Update payment status in Google Sheets
-    if (status === 'success' || status === 'completed') {
-      await googleSheetsService.updatePaymentStatus(txnid, 'SUCCESS')
-      console.log(`PayU payment successful for transaction: ${txnid}`)
-    } else {
-      await googleSheetsService.updatePaymentStatus(txnid, 'FAILED')
-      console.log(`PayU payment failed for transaction: ${txnid}, status: ${status}`)
-    }
-
-    // Return success response to PayU
-    return NextResponse.json({ 
-      success: true,
-      txnid,
-      status: 'received',
-      message: 'Callback processed successfully'
+    // PayU sends data as application/x-www-form-urlencoded
+    const formData = await request.formData()
+    const body: any = {}
+    formData.forEach((value, key) => {
+      body[key] = value
     })
+
+    console.log('--- PAYU CALLBACK DEBUG ---')
+    console.log('Callback Data:', JSON.stringify(body, null, 2))
+
+    // Trim for consistency
+    const rawTxnid = body.txnid
+    const txnid = String(rawTxnid || '').trim()
+    const { status, amount } = body
+
+    if (!txnid) {
+       console.error('Missing txnid in PayU callback')
+       return NextResponse.redirect(new URL('/payment/failure?error=missing_id', request.url))
+    }
+
+    console.log(`[PayU Callback] Processing TXN ID: "${txnid}"`)
+    
+    const isSuccess = status === 'success' || status === 'completed'
+    const finalStatus = isSuccess ? 'SUCCESS' : 'FAILED'
+
+    // Update payment status in Google Sheets (Trimming here too)
+    try {
+      await googleSheetsService.updatePaymentStatus(txnid, finalStatus)
+      console.log(`[PayU Callback] Status updated to ${finalStatus} for "${txnid}"`)
+    } catch (err) {
+      console.error(`[PayU Callback] Failed to update status for "${txnid}":`, err)
+    }
+
+    // Build redirect URL
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin
+    const redirectUrl = new URL(isSuccess ? '/payment/success' : '/payment/failure', baseUrl)
+    redirectUrl.searchParams.set('transactionId', txnid)
+    redirectUrl.searchParams.set('status', finalStatus)
+    redirectUrl.searchParams.set('amount', amount || '1')
+
+    console.log(`[PayU Callback] Redirecting to: ${redirectUrl.toString()}`)
+
+    // Perform browser redirect (303 See Other is best for POST to GET)
+    return NextResponse.redirect(redirectUrl.toString(), 303)
 
   } catch (error) {
     console.error('Error processing PayU callback:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    // Fallback redirect to home or failure
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin
+    return NextResponse.redirect(new URL('/payment/failure?error=system_error', baseUrl), 303)
   }
 }
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    const txnid = searchParams.get('txnid')
+    const rawTxnid = searchParams.get('transactionId') || searchParams.get('txnid')
+    const txnid = String(rawTxnid || '').trim()
 
     if (!txnid) {
       return NextResponse.json(
@@ -66,24 +70,46 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Check payment status
-    const statusResponse = await payUService.checkPaymentStatus(txnid)
-    
-    if (!statusResponse.success) {
-      return NextResponse.json(
-        { error: 'Failed to check payment status' },
-        { status: 500 }
-      )
+    console.log(`[PayU-GET] Checking data for: "${txnid}"`)
+
+    // Check payment status (best effort)
+    let paymentStatus = 'unknown'
+    try {
+      const statusResponse = await payUService.checkPaymentStatus(txnid)
+      if (statusResponse.success) {
+        paymentStatus = statusResponse.data?.status || 'unknown'
+      }
+    } catch (err) {
+      console.warn('[PayU-GET] Payment status check failed:', err)
     }
 
     // Get transaction details from Google Sheets
-    const transaction = await googleSheetsService.getTransaction(txnid)
+    let transaction = await googleSheetsService.getTransaction(txnid)
+
+    // FALLBACK: If not in Sheets, check Prisma
+    if (!transaction) {
+      console.warn(`[PayU-GET] Transaction "${txnid}" not found in Google Sheets, trying Prisma...`)
+      try {
+        const { db } = await import('@/lib/db')
+        const dbRecord = await db.scholarshipApplication.findUnique({
+          where: { transactionId: txnid }
+        })
+        
+        if (dbRecord) {
+          console.log(`[PayU-GET] Found record in Prisma for "${txnid}"`)
+          transaction = dbRecord as any
+        } else {
+           console.warn(`[PayU-GET] Transaction "${txnid}" NOT found in Prisma either`)
+        }
+      } catch (dbErr) {
+        console.error('[PayU-GET] Prisma fallback lookup failed:', dbErr)
+      }
+    }
 
     return NextResponse.json({
       success: true,
-      paymentStatus: statusResponse.data?.status || 'unknown',
+      paymentStatus: paymentStatus !== 'unknown' ? paymentStatus : (transaction?.paymentStatus || 'unknown'),
       transaction: transaction,
-      details: statusResponse.data
     })
 
   } catch (error) {

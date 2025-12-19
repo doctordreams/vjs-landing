@@ -50,7 +50,7 @@ const defaultSettings: AdminSettings = {
   payuSalt: '',
   payuBaseUrl: 'https://test.payu.in',
   payuMerchantId: '',
-  applicationFee: '250',
+  applicationFee: '1',
   applicationCurrency: 'INR',
   applicationName: 'Vaidya Jyothi Scholarship',
   smtpHost: '',

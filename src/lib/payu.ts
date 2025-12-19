@@ -78,7 +78,6 @@ export interface PayUCallbackData {
   payuMoneyId?: string
   PG_TYPE?: string
   deleted?: string
-  mihpayid?: string
 }
 
 class PayUService {
@@ -97,91 +96,105 @@ class PayUService {
     this.baseUrl = process.env.PAYU_BASE_URL || this.getStoredSetting('payuBaseUrl') || 
       (process.env.NODE_ENV === 'production' ? 'https://secure.payu.in' : 'https://test.payu.in')
     
-    // Success and Failure URLs - Must use production URL in production
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || this.getStoredSetting('siteUrl') || ''
-    if (!baseUrl) {
-      console.warn('⚠️ NEXT_PUBLIC_APP_URL or siteUrl not set! Payment redirects may fail.')
+    // Success and Failure URLs - Must use absolute URL
+    let baseUrl = process.env.NEXT_PUBLIC_APP_URL || this.getStoredSetting('siteUrl') || ''
+    
+    // Fallback for local testing if not set
+    if (!baseUrl || baseUrl === 'null' || baseUrl === 'undefined') {
+      baseUrl = 'http://localhost:3000'
     }
-    this.surl = baseUrl ? `${baseUrl}/payment/success` : '/payment/success'
-    this.furl = baseUrl ? `${baseUrl}/payment/failure` : '/payment/failure'
+    
+    // Remove trailing slash if present
+    baseUrl = baseUrl.replace(/\/$/, '')
+    
+    this.surl = `${baseUrl}/api/payment/payu-callback`
+    this.furl = `${baseUrl}/api/payment/payu-callback`
   }
 
   private getStoredSetting(key: string): string {
     return getAdminSetting(key as keyof import('./admin-settings').AdminSettings)
   }
 
-  private generateHash(params: Record<string, string>): string {
-    // Sort the parameters alphabetically
-    const sortedKeys = Object.keys(params).sort()
-    const hashString = sortedKeys
-      .map(key => `${key}=${params[key]}`)
-      .join('&')
+  private generateHash(params: any): string {
+    // PayU Hash Formula: sha512(key|txnid|amount|productinfo|firstname|email|udf1|udf2|udf3|udf4|udf5|udf6|udf7|udf8|udf9|udf10|salt)
+    const hashString = [
+      params.key,
+      params.txnid,
+      params.amount,
+      params.productinfo,
+      params.firstname,
+      params.email,
+      params.udf1 || '',
+      params.udf2 || '',
+      params.udf3 || '',
+      params.udf4 || '',
+      params.udf5 || '',
+      params.udf6 || '',
+      params.udf7 || '',
+      params.udf8 || '',
+      params.udf9 || '',
+      params.udf10 || '',
+      this.salt
+    ].join('|')
     
-    // Append salt and generate hash
-    const hashStringWithSalt = hashString + this.salt
-    return crypto.createHash('sha512').update(hashStringWithSalt).digest('hex')
+    return crypto.createHash('sha512').update(hashString).digest('hex')
   }
 
   async initiatePayment(paymentRequest: Omit<PayUPaymentRequest, 'hash'>): Promise<PayUPaymentResponse> {
     try {
-      // Generate transaction ID
-      const txnid = `TXN${Date.now()}${Math.random().toString(36).substr(2, 6).toUpperCase()}`
+      // Use provided transaction ID
+      const txnid = paymentRequest.txnid;
 
-      // Prepare parameters
+      // Prepare parameters in the order required for hash calculation
       const params = {
         key: this.key,
         txnid: txnid,
         amount: paymentRequest.amount,
+        productinfo: paymentRequest.productinfo,
         firstname: paymentRequest.firstname,
         email: paymentRequest.email,
         phone: paymentRequest.phone,
-        productinfo: paymentRequest.productinfo,
         surl: this.surl,
-        furl: this.furl
+        furl: this.furl,
+        udf1: '', 
+        udf2: '',
+        udf3: '',
+        udf4: '',
+        udf5: '',
+        udf6: '',
+        udf7: '',
+        udf8: '',
+        udf9: '',
+        udf10: ''
       }
 
       // Generate hash
       const hash = this.generateHash(params)
 
-      // Prepare request data
+      // Prepare request data with hash
       const requestData = {
         ...params,
         hash
       }
 
-      const response = await axios.post(
-        `${this.baseUrl}/payment`,
-        requestData,
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          }
-        }
-      )
+      console.log('--- PAYU SIGNING DEBUG ---')
+      console.log('Generated Hash:', hash)
+      console.log('Parameters:', JSON.stringify(requestData, null, 2))
 
-      if (response.data.status === 1) {
-        return {
-          success: true,
-          data: {
-            txnid,
-            amount: paymentRequest.amount,
-            status: 'pending',
-            hash,
-            paymentUrl: response.data.payment_url || response.data.surl
-          }
-        }
-      } else {
-        return {
-          success: false,
-          message: response.data.msg || 'Failed to initiate payment'
-        }
+      // Return the data for the frontend to submit via Form POST
+      return {
+        success: true,
+        data: {
+          status: 'pending',
+          paymentUrl: `${this.baseUrl}/_payment`, 
+          ...requestData
+        } as any
       }
-    } catch (error) {
-      console.error('PayU payment initiation error:', error)
+    } catch (error: any) {
+      console.error('PayU signing error:', error)
       return {
         success: false,
-        message: 'Failed to initiate payment'
+        message: 'Failed to generate payment signature'
       }
     }
   }

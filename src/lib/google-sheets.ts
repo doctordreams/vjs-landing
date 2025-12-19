@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { getAdminSetting } from './admin-settings'
 
 // Default Spreadsheet ID - can be overridden by admin settings
-let SPREADSHEET_ID = '1Q5joAp1s78blerN0GnFaI-Y-w4wSfeAw0Gb6Bjz_NOw'
+let SPREADSHEET_ID = process.env.GOOGLE_SHEET_ID || '1Q5joAp1s78blerN0GnFaI-Y-w4wSfeAw0Gb6Bjz_NOw'
 
 // Define the range for our data
 const SHEET_NAME = 'Sheet1' // Default sheet name
@@ -34,6 +34,7 @@ export interface ScholarshipApplication {
   collegePreference: string
   budget: string
   facilities: string
+  comments: string
 }
 
 class GoogleSheetsService {
@@ -92,9 +93,55 @@ class GoogleSheetsService {
           data.countryPreference,
           data.collegePreference,
           data.budget,
-          data.facilities
+          data.facilities,
+          data.comments
         ]
       ]
+
+      // Check if headers need to be added (if sheet is empty)
+      const getResponse = await this.sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `${SHEET_NAME}!A1:A1`
+      })
+
+      if (!getResponse.data.values || getResponse.data.values.length === 0) {
+        const headers = [
+          'Timestamp',
+          'Student ID', 
+          'Transaction ID',
+          'Payment Status',
+          'Amount',
+          'Student Name',
+          'Father Name',
+          'Mother Name',
+          'Student Mobile',
+          'Father Mobile',
+          'Mother Mobile',
+          'Email',
+          'Address',
+          'Pincode',
+          'Taluk',
+          'District',
+          'Present College',
+          'Tenth Percentage',
+          'DD Representative',
+          'Country Preference',
+          'College Preference',
+          'Budget',
+          'Facilities',
+          'Comments'
+        ]
+        
+        await this.sheets.spreadsheets.values.append({
+          spreadsheetId: SPREADSHEET_ID,
+          range: `${SHEET_NAME}!A1:Z1`,
+          valueInputOption: 'USER_ENTERED',
+          requestBody: {
+             values: [headers]
+          }
+        })
+        console.log('Added headers to Google Sheet')
+      }
 
       const response = await this.sheets.spreadsheets.values.append({
         spreadsheetId: SPREADSHEET_ID,
@@ -165,12 +212,20 @@ class GoogleSheetsService {
 
       const rows = response.data.values
       if (!rows || rows.length === 0) {
+        console.log(`[Sheets] Spreadsheet "${SPREADSHEET_ID}" is empty`)
         return null
       }
 
+      console.log(`[Sheets] Searching ${rows.length} rows for TXN ID: "${transactionId.trim()}" in Spreadsheet "${SPREADSHEET_ID}"`)
+      
+      // Log the first 5 rows for debugging structure
+      console.log('[Sheets] Sample structure (first 5 IDs):', rows.slice(0, 5).map(r => r[2] || 'undefined').join(', '))
+
       // Find the row with matching transaction ID
       for (const row of rows) {
-        if (row[2] === transactionId) { // Transaction ID is at index 2
+        const rowTxnId = row[2] ? String(row[2]).trim() : ''
+        if (rowTxnId === transactionId.trim()) {
+          console.log('[Sheets] Found matching row for', transactionId)
           return {
             timestamp: row[0] || '',
             studentId: row[1] || '',
@@ -194,7 +249,8 @@ class GoogleSheetsService {
             countryPreference: row[19] || '',
             collegePreference: row[20] || '',
             budget: row[21] || '',
-            facilities: row[22] || ''
+            facilities: row[22] || '',
+            comments: row[23] || ''
           }
         }
       }
@@ -203,6 +259,51 @@ class GoogleSheetsService {
     } catch (error) {
       console.error('Error getting transaction:', error)
       throw new Error('Failed to retrieve transaction')
+    }
+  }
+
+  async getAllTransactions(): Promise<ScholarshipApplication[]> {
+    try {
+      const response = await this.sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: RANGE
+      })
+
+      const rows = response.data.values
+      if (!rows || rows.length <= 1) { // <= 1 to skip headers or empty
+        return []
+      }
+
+      // Skip the header row (index 0)
+      return rows.slice(1).map(row => ({
+        timestamp: row[0] || '',
+        studentId: row[1] || '',
+        transactionId: row[2] || '',
+        paymentStatus: row[3] as 'PENDING' | 'SUCCESS' | 'FAILED',
+        amount: parseFloat(row[4]) || 0,
+        studentName: row[5] || '',
+        fatherName: row[6] || '',
+        motherName: row[7] || '',
+        studentMobile: row[8] || '',
+        fatherMobile: row[9] || '',
+        motherMobile: row[10] || '',
+        email: row[11] || '',
+        address: row[12] || '',
+        pincode: row[13] || '',
+        taluk: row[14] || '',
+        district: row[15] || '',
+        presentCollege: row[16] || '',
+        tenthPercentage: row[17] || '',
+        ddRepresentative: row[18] || '',
+        countryPreference: row[19] || '',
+        collegePreference: row[20] || '',
+        budget: row[21] || '',
+        facilities: row[22] || '',
+        comments: row[23] || ''
+      }))
+    } catch (error) {
+      console.error('Error getting all transactions:', error)
+      return []
     }
   }
 

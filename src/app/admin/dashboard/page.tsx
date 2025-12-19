@@ -10,8 +10,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Separator } from '@/components/ui/separator'
-import { Shield, Save, Eye, EyeOff, LogOut, CheckCircle, AlertTriangle, RefreshCw, Palette, CreditCard, Database, Key, Settings, Wallet } from 'lucide-react'
+import { Shield, Save, Eye, EyeOff, LogOut, CheckCircle, AlertTriangle, RefreshCw, Palette, CreditCard, Database, Key, Settings, Wallet, FileText, ExternalLink, Loader2 } from 'lucide-react'
 import { ThemeSwitcher } from '@/components/theme'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
 
 interface AdminSettings {
   paymentGateway: 'phonepe' | 'payu';
@@ -81,6 +83,24 @@ export default function AdminDashboard() {
     googlePrivateKey: false,
     smtpPassword: false
   })
+  const [applications, setApplications] = useState<any[]>([])
+  const [isLoadingApplications, setIsLoadingApplications] = useState(false)
+
+  const loadApplications = async () => {
+    setIsLoadingApplications(true)
+    try {
+      const response = await fetch('/api/admin/applications')
+      const data = await response.json()
+
+      if (data.success) {
+        setApplications(data.applications)
+      }
+    } catch (error) {
+      console.error('Error loading applications:', error)
+    } finally {
+      setIsLoadingApplications(false)
+    }
+  }
 
   const loadSettings = async () => {
     try {
@@ -99,6 +119,7 @@ export default function AdminDashboard() {
     // Middleware handles authentication, so we can assume user is authenticated
     // Load settings from localStorage (will be changed to server-side storage later)
     loadSettings()
+    loadApplications()
     setIsAuthenticated(true)
   }, [])
 
@@ -254,8 +275,12 @@ export default function AdminDashboard() {
           </Alert>
         )}
 
-        <Tabs defaultValue="phonepe" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-2 lg:grid-cols-5">
+        <Tabs defaultValue="applications" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-2 lg:grid-cols-6">
+            <TabsTrigger value="applications" className="flex items-center gap-2">
+              <FileText className="w-4 h-4" />
+              Applications
+            </TabsTrigger>
             <TabsTrigger value="phonepe" className="flex items-center gap-2">
               <CreditCard className="w-4 h-4" />
               PhonePe
@@ -277,6 +302,89 @@ export default function AdminDashboard() {
               General
             </TabsTrigger>
           </TabsList>
+
+          {/* Applications Tab */}
+          <TabsContent value="applications">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <FileText className="w-5 h-5" />
+                    Scholarship Applications
+                  </CardTitle>
+                  <CardDescription>
+                    Review and manage all submitted scholarship applications
+                  </CardDescription>
+                </div>
+                <div className="flex gap-2">
+                   {settings.googleSheetId && (
+                    <a 
+                      href={`https://docs.google.com/spreadsheets/d/${settings.googleSheetId}`} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                    >
+                      <Button variant="outline" size="sm" className="flex items-center gap-2">
+                        <ExternalLink className="w-4 h-4" />
+                        View on Spreadsheet
+                      </Button>
+                    </a>
+                  )}
+                  <Button variant="outline" size="sm" onClick={loadApplications} disabled={isLoadingApplications}>
+                    <RefreshCw className={`w-4 h-4 ${isLoadingApplications ? 'animate-spin' : ''}`} />
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="rounded-md border overflow-hidden">
+                  <Table>
+                    <TableHeader className="bg-gray-50">
+                      <TableRow>
+                        <TableHead className="font-bold">Student Name</TableHead>
+                        <TableHead className="font-bold">Contact</TableHead>
+                        <TableHead className="font-bold">Email</TableHead>
+                        <TableHead className="font-bold text-center">Status</TableHead>
+                        <TableHead className="font-bold text-right">Date</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {isLoadingApplications ? (
+                        <TableRow>
+                          <TableCell colSpan={5} className="text-center py-8">
+                            <Loader2 className="w-6 h-6 animate-spin mx-auto text-gray-400" />
+                          </TableCell>
+                        </TableRow>
+                      ) : applications.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={5} className="text-center py-8 text-gray-500">
+                            No applications found.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        applications.map((app) => (
+                          <TableRow key={app.id}>
+                            <TableCell className="font-medium">{app.studentName}</TableCell>
+                            <TableCell>{app.studentMobile}</TableCell>
+                            <TableCell>{app.email}</TableCell>
+                            <TableCell className="text-center">
+                              <Badge 
+                                variant={app.paymentStatus === 'SUCCESS' ? 'default' : 'destructive'}
+                                className={app.paymentStatus === 'SUCCESS' ? 'bg-green-100 text-green-800 border-green-200' : ''}
+                              >
+                                {app.paymentStatus}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right text-gray-500 text-xs">
+                              {app.timestamp ? new Date(app.timestamp).toLocaleDateString() : 'N/A'}
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
           {/* PhonePe Settings */}
           <TabsContent value="phonepe">
@@ -646,7 +754,7 @@ export default function AdminDashboard() {
                       id="applicationFee"
                       value={settings.applicationFee}
                       onChange={(e) => handleInputChange('applicationFee', e.target.value)}
-                      placeholder="250"
+                      placeholder="1"
                     />
                   </div>
                   
@@ -696,7 +804,7 @@ export default function AdminDashboard() {
                       id="supportPhone"
                       value={settings.supportPhone}
                       onChange={(e) => handleInputChange('supportPhone', e.target.value)}
-                      placeholder="+91 98765 43210"
+                      placeholder="+91-9035061122"
                     />
                   </div>
                 </div>

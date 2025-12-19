@@ -4,13 +4,16 @@ import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { CheckCircle, Download, Home, Mail, Phone } from 'lucide-react'
+import { CheckCircle, Download, Home, Mail, Phone, ExternalLink, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 
 function PaymentSuccessContent() {
   const searchParams = useSearchParams()
   const [transactionDetails, setTransactionDetails] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [downloading, setDownloading] = useState(false)
+  const [retryCount, setRetryCount] = useState(0)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   useEffect(() => {
     const transactionId = searchParams.get('transactionId') || searchParams.get('txnid')
@@ -36,31 +39,46 @@ function PaymentSuccessContent() {
         }
       })
       setLoading(false)
-    } else if (transactionId) {
+    } else if (transactionId && transactionId !== 'null') {
       fetchTransactionDetails(transactionId)
     } else {
       setLoading(false)
     }
   }, [searchParams])
 
-  const fetchTransactionDetails = async (transactionId: string) => {
+  const fetchTransactionDetails = async (transactionId: string, currentRetry: number = 0) => {
     try {
       const response = await fetch(`/api/payment/callback?transactionId=${transactionId}`)
       const data = await response.json()
       
-      if (data.success) {
+      if (data.success && data.transaction) {
         setTransactionDetails(data)
+        setErrorMessage(null)
+        setLoading(false)
+      } else if (currentRetry < 3) {
+        // Retry up to 3 times with increasing delay
+        const delay = (currentRetry + 1) * 2000
+        console.log(`Transaction not found, retrying in ${delay}ms... (Attempt ${currentRetry + 1})`)
+        setTimeout(() => {
+          fetchTransactionDetails(transactionId, currentRetry + 1)
+        }, delay)
+      } else {
+        setErrorMessage("Transaction confirmed by bank, but we're still syncing your details. Please refresh this page in a few seconds.")
+        setLoading(false)
       }
     } catch (error) {
       console.error('Error fetching transaction details:', error)
-    } finally {
+      setErrorMessage("Failed to connect to the server. Please check your connection and refresh.")
       setLoading(false)
     }
   }
 
   const downloadReceipt = () => {
     if (!transactionDetails?.transaction) return
-
+    setDownloading(true)
+    
+    // Simulate slight delay for effect
+    setTimeout(() => {
     const receiptContent = `
 VAIDYA JYOTHI SCHOLARSHIP - PAYMENT RECEIPT
 
@@ -109,11 +127,13 @@ Generated on: ${new Date().toLocaleString()}
     a.click()
     document.body.removeChild(a)
     window.URL.revokeObjectURL(url)
+    setDownloading(false)
+    }, 800)
   }
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 flex items-center justify-center">
+      <div className="min-h-screen bg-linear-to-br from-green-50 to-blue-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Verifying payment details...</p>
@@ -123,7 +143,7 @@ Generated on: ${new Date().toLocaleString()}
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 py-8 px-4">
+    <div className="min-h-screen bg-linear-to-br from-green-50 to-blue-50 py-8 px-4">
       <div className="max-w-2xl mx-auto">
         {/* Success Header */}
         <div className="text-center mb-8">
@@ -132,6 +152,14 @@ Generated on: ${new Date().toLocaleString()}
           </div>
           <h1 className="text-3xl font-bold text-gray-800 mb-2">Payment Successful!</h1>
           <p className="text-gray-600">Your scholarship application has been submitted successfully.</p>
+          
+          {errorMessage && (
+            <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-sm">
+              <p className="font-semibold mb-1">⚠️ Notice</p>
+              {errorMessage}
+            </div>
+          )}
+
           {searchParams.get('test') === 'true' && (
             <div className="mt-4 inline-flex items-center px-4 py-2 bg-yellow-100 border border-yellow-400 rounded-lg">
               <span className="text-yellow-800 text-sm font-medium">🧪 Test Mode - This is a simulated payment</span>
@@ -211,19 +239,26 @@ Generated on: ${new Date().toLocaleString()}
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <Button 
             onClick={downloadReceipt}
-            className="flex items-center gap-2"
-            disabled={!transactionDetails?.transaction}
+            className="flex items-center gap-2 cursor-pointer transition-all active:scale-95"
+            disabled={!transactionDetails?.transaction || downloading}
           >
-            <Download className="w-4 h-4" />
-            Download Receipt
+            {downloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+            {downloading ? 'Downloading...' : 'Download Receipt'}
           </Button>
           
           <Link href="/">
-            <Button variant="outline" className="flex items-center gap-2">
+            <Button variant="outline" className="flex items-center gap-2 cursor-pointer transition-all hover:bg-slate-100 active:scale-95 w-full sm:w-auto">
               <Home className="w-4 h-4" />
               Back to Home
             </Button>
           </Link>
+
+          <a href="https://www.doctordreams.in" target="_blank" rel="noopener noreferrer">
+            <Button variant="secondary" className="flex items-center gap-2 cursor-pointer transition-all hover:bg-slate-200 active:scale-95 w-full sm:w-auto">
+              <ExternalLink className="w-4 h-4" />
+              Visit Website
+            </Button>
+          </a>
         </div>
 
         {/* Contact Information */}
@@ -233,11 +268,11 @@ Generated on: ${new Date().toLocaleString()}
             <div className="flex flex-col sm:flex-row gap-4 text-sm">
               <div className="flex items-center gap-2">
                 <Mail className="w-4 h-4 text-gray-600" />
-                <span>support@vaidyajyothi.com</span>
+                <span>admissions@doctordreams.in</span>
               </div>
               <div className="flex items-center gap-2">
                 <Phone className="w-4 h-4 text-gray-600" />
-                <span>+91 98765 43210</span>
+                <span>+91-9035061122</span>
               </div>
             </div>
           </CardContent>
@@ -250,7 +285,7 @@ Generated on: ${new Date().toLocaleString()}
 export default function PaymentSuccess() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 flex items-center justify-center">
+      <div className="min-h-screen bg-linear-to-br from-green-50 to-blue-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Loading...</p>
