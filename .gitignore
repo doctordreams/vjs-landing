@@ -48,3 +48,8 @@ test
 prompt
 
 server.log
+
+# Sensitive credential files
+VERCEL_ENV*.txt
+create-production-admin.ts
+env
