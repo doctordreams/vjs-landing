@@ -13,6 +13,7 @@ export async function POST(request: NextRequest) {
       'fatherName', 
       'motherName',
       'studentMobile',
+      'fatherMobile',
       'email',
       'address',
       'pincode',
@@ -24,11 +25,21 @@ export async function POST(request: NextRequest) {
     ]
 
     for (const field of requiredFields) {
-      if (!body[field] || body[field].trim() === '') {
-        return NextResponse.json(
-          { error: `${field} is required` },
-          { status: 400 }
-        )
+      // Special handling for countryPreference which is now an array
+      if (field === 'countryPreference') {
+        if (!body[field] || !Array.isArray(body[field]) || body[field].length === 0) {
+          return NextResponse.json(
+            { error: 'At least one country preference is required' },
+            { status: 400 }
+          )
+        }
+      } else {
+        if (!body[field] || body[field].trim() === '') {
+          return NextResponse.json(
+            { error: `${field} is required` },
+            { status: 400 }
+          )
+        }
       }
     }
 
