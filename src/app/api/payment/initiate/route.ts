@@ -99,30 +99,17 @@ export async function POST(request: NextRequest) {
       // But we proceed with the fallback if possible
     }
 
+    // Get admin settings directly instead of using internal fetch (which fails due to auth)
+    const { getAdminSettings } = await import('@/lib/admin-settings')
+    const adminSettings = getAdminSettings()
+    
     // Get payment gateway from admin settings
-    let paymentGateway = 'phonepe' // default
-    try {
-      const settingsUrl = baseUrl ? `${baseUrl}/api/admin/settings` : '/api/admin/settings'
-      const settingsResponse = await fetch(settingsUrl)
-      const settingsData = await settingsResponse.json()
-      if (settingsData.success && settingsData.settings.paymentGateway) {
-        paymentGateway = settingsData.settings.paymentGateway
-      }
-    } catch (error) {
-      console.error('Error fetching settings:', error)
-    }
-
+    let paymentGateway = adminSettings.paymentGateway || 'payu'
+    
     // Get application fee from admin settings (default to 250)
     let applicationFee = 250
-    try {
-      const settingsUrl = baseUrl ? `${baseUrl}/api/admin/settings` : '/api/admin/settings'
-      const settingsResponse = await fetch(settingsUrl)
-      const settingsData = await settingsResponse.json()
-      if (settingsData.success && settingsData.settings.applicationFee) {
-        applicationFee = parseFloat(settingsData.settings.applicationFee) || 250
-      }
-    } catch (error) {
-      console.error('Error fetching settings:', error)
+    if (adminSettings.applicationFee) {
+      applicationFee = parseFloat(adminSettings.applicationFee) || 250
     }
 
     // Prepare data for Google Sheets
