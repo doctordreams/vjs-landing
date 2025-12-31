@@ -57,7 +57,7 @@ export default function AdminDashboard() {
     phonepeBaseUrl: 'https://api.phonepe.com',
     payuKey: '',
     payuSalt: '',
-    payuBaseUrl: process.env.NODE_ENV === 'production' ? 'https://secure.payu.in' : 'https://test.payu.in',
+    payuBaseUrl:'https://secure.payu.in',
     payuMerchantId: '',
     applicationFee: '250',
     applicationCurrency: 'INR',

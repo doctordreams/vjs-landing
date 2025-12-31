@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
     const transactionId = googleSheetsService.generateTransactionId()
 
     // Get base URL - CRITICAL for production
-    let baseUrl = process.env.NEXT_PUBLIC_APP_URL || ''
+    let baseUrl = (process.env.NEXT_PUBLIC_APP_URL || '').trim()
     
     // Fallback for local development
     if (!baseUrl || baseUrl === 'null' || baseUrl === 'undefined') {

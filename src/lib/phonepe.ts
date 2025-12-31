@@ -55,13 +55,13 @@ class PhonePeService {
 
   constructor() {
     // Load settings from environment variables or admin settings
-    this.merchantId = process.env.PHONEPE_MERCHANT_ID || this.getStoredSetting('phonepeMerchantId') || ''
-    this.saltKey = process.env.PHONEPE_SALT_KEY || this.getStoredSetting('phonepeSaltKey') || ''
-    this.saltIndex = process.env.PHONEPE_SALT_INDEX || this.getStoredSetting('phonepeSaltIndex') || '1'
+    this.merchantId = (process.env.PHONEPE_MERCHANT_ID || this.getStoredSetting('phonepeMerchantId') || '').trim()
+    this.saltKey = (process.env.PHONEPE_SALT_KEY || this.getStoredSetting('phonepeSaltKey') || '').trim()
+    this.saltIndex = (process.env.PHONEPE_SALT_INDEX || this.getStoredSetting('phonepeSaltIndex') || '1').trim()
     
     // PhonePe Base URL - Use production URL: https://api.phonepe.com (or test: https://api-preprod.phonepe.com)
-    this.baseUrl = process.env.PHONEPE_BASE_URL || this.getStoredSetting('phonepeBaseUrl') || 
-      (process.env.NODE_ENV === 'production' ? 'https://api.phonepe.com' : 'https://api-preprod.phonepe.com')
+    this.baseUrl = (process.env.PHONEPE_BASE_URL || this.getStoredSetting('phonepeBaseUrl') || 
+      (process.env.NODE_ENV === 'production' ? 'https://api.phonepe.com' : 'https://api-preprod.phonepe.com')).trim()
   }
 
   private getStoredSetting(key: string): string {

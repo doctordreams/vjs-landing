@@ -89,15 +89,15 @@ class PayUService {
 
   constructor() {
     // Load settings from environment variables or admin settings
-    this.key = process.env.PAYU_KEY || this.getStoredSetting('payuKey') || ''
-    this.salt = process.env.PAYU_SALT || this.getStoredSetting('payuSalt') || ''
+    this.key = (process.env.PAYU_KEY || this.getStoredSetting('payuKey') || '').trim()
+    this.salt = (process.env.PAYU_SALT || this.getStoredSetting('payuSalt') || '').trim()
     
     // PayU Base URL - Use production URL: https://secure.payu.in (or test: https://test.payu.in)
-    this.baseUrl = process.env.PAYU_BASE_URL || this.getStoredSetting('payuBaseUrl') || 
-      (process.env.NODE_ENV === 'production' ? 'https://secure.payu.in' : 'https://test.payu.in')
+    this.baseUrl = (process.env.PAYU_BASE_URL || this.getStoredSetting('payuBaseUrl') || 
+      (process.env.NODE_ENV === 'production' ? 'https://secure.payu.in' : 'https://test.payu.in')).trim()
     
     // Success and Failure URLs - Must use absolute URL
-    let baseUrl = process.env.NEXT_PUBLIC_APP_URL || this.getStoredSetting('siteUrl') || ''
+    let baseUrl = (process.env.NEXT_PUBLIC_APP_URL || this.getStoredSetting('siteUrl') || '').trim()
     
     // Fallback for local testing if not set
     if (!baseUrl || baseUrl === 'null' || baseUrl === 'undefined') {
@@ -154,8 +154,8 @@ class PayUService {
         firstname: paymentRequest.firstname,
         email: paymentRequest.email,
         phone: paymentRequest.phone,
-        surl: this.surl,
-        furl: this.furl,
+        surl: paymentRequest.surl || this.surl,
+        furl: paymentRequest.furl || this.furl,
         udf1: '', 
         udf2: '',
         udf3: '',

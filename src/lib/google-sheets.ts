@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { getAdminSetting } from './admin-settings'
 
 // Default Spreadsheet ID - can be overridden by admin settings
-let SPREADSHEET_ID = process.env.GOOGLE_SHEET_ID || '1Q5joAp1s78blerN0GnFaI-Y-w4wSfeAw0Gb6Bjz_NOw'
+let SPREADSHEET_ID = (process.env.GOOGLE_SHEET_ID || '1Q5joAp1s78blerN0GnFaI-Y-w4wSfeAw0Gb6Bjz_NOw').trim()
 
 // Define the range for our data
 const SHEET_NAME = 'Sheet1' // Default sheet name
@@ -52,10 +52,13 @@ class GoogleSheetsService {
     }
 
     // Initialize Google Auth with service account
+    const email = (process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || this.getStoredSetting('googleServiceAccountEmail'))?.trim()
+    const key = (process.env.GOOGLE_PRIVATE_KEY || this.getStoredSetting('googlePrivateKey'))?.replace(/\\n/g, '\n').trim()
+
     this.auth = new GoogleAuth({
       credentials: {
-        client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || this.getStoredSetting('googleServiceAccountEmail'),
-        private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n') || this.getStoredSetting('googlePrivateKey')?.replace(/\\n/g, '\n'),
+        client_email: email,
+        private_key: key,
       },
       scopes: ['https://www.googleapis.com/auth/spreadsheets'],
     })
